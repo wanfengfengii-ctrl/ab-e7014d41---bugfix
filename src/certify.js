@@ -63,6 +63,40 @@ export function validateInput(input) {
       } else if (area2 < 0 && !allRight) {
         errors.push('工作区既不是凸多边形，顶点顺序也可能不是逆时针');
       }
+      // 自交检测：局部转向全部同向（甚至面积守恒）不代表轮廓简单——
+      // 星形复杂多边形每个局部转向都是逆时针，鞋带公式也会给出正面积，
+      // 但其“内部”没有有效业务几何含义。简单多边形要求任意两条非相邻边
+      // 不相交、不触碰、不重叠（相邻边共享顶点属正常）。
+      const lenTol = 1e-9 * scale;
+      const turn = (a, b, p) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+      const onSeg = (a, b, p) =>
+        p[0] >= Math.min(a[0], b[0]) - lenTol && p[0] <= Math.max(a[0], b[0]) + lenTol &&
+        p[1] >= Math.min(a[1], b[1]) - lenTol && p[1] <= Math.max(a[1], b[1]) + lenTol;
+      const straddle = (u, v) => (u > tol && v < -tol) || (u < -tol && v > tol);
+      let selfCrossed = false;
+      for (let i = 0; i < n && !selfCrossed; i++) {
+        for (let j = i + 1; j < n && !selfCrossed; j++) {
+          if (j === i + 1 || (i === 0 && j === n - 1)) continue; // 相邻边
+          const a = wa[i];
+          const b = wa[(i + 1) % n];
+          const c = wa[j];
+          const d = wa[(j + 1) % n];
+          const o1 = turn(a, b, c);
+          const o2 = turn(a, b, d);
+          const o3 = turn(c, d, a);
+          const o4 = turn(c, d, b);
+          if (
+            (straddle(o1, o2) && straddle(o3, o4)) || // 严格交叉
+            (Math.abs(o1) <= tol && onSeg(a, b, c)) || // 端点落在非相邻边上（触碰/重叠）
+            (Math.abs(o2) <= tol && onSeg(a, b, d)) ||
+            (Math.abs(o3) <= tol && onSeg(c, d, a)) ||
+            (Math.abs(o4) <= tol && onSeg(c, d, b))
+          ) {
+            selfCrossed = true;
+          }
+        }
+      }
+      if (selfCrossed) errors.push('工作区轮廓存在自交，必须是边互不相交的简单多边形');
     }
   }
   const strips = input?.strips;

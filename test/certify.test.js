@@ -84,6 +84,39 @@ describe('输入校验', () => {
     assert.equal(r.ok, false);
     assert.ok(r.errors.some((e) => e.includes('凸')));
   });
+  test('拒绝自交轮廓：局部全左转的星形复杂多边形（验收场景）', () => {
+    // 每个局部转向均为逆时针、鞋带面积为正（367），但轮廓自交，
+    // 不得给出覆盖认证结论或面积统计。
+    const r = certify({
+      workarea: [[10, 0], [0, 10], [-10, 0], [0, -10], [7, 7], [-7, 7], [-7, -7], [7, -7]],
+      strips: [
+        { cx: 0, cy: 0, w: 40, h: 40, angle: 0 },      // R1 覆盖其包围范围
+        { cx: 100, cy: 100, w: 2, h: 2, angle: 0 },    // R2 远离工作区
+        { cx: -100, cy: -100, w: 2, h: 2, angle: 0 },  // R3 远离工作区
+      ],
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => e.includes('自交')), `errors=${JSON.stringify(r.errors)}`);
+    assert.equal(r.stats, undefined);
+    assert.equal(r.firstRisk, undefined);
+    assert.equal(r.risks, undefined);
+  });
+  test('拒绝蝴蝶结（对边严格交叉）轮廓', () => {
+    const r = certify({
+      workarea: [[0, 0], [30, 30], [30, 0], [0, 30]],
+      strips: goodStrips,
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => e.includes('自交')));
+  });
+  test('拒绝顶点落在非相邻边上（触碰即非简单）', () => {
+    const r = certify({
+      workarea: [[0, 0], [30, 0], [30, 30], [15, 0], [0, 30]],
+      strips: goodStrips,
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => e.includes('自交')));
+  });
   test('拒绝非整数矩形参数', () => {
     const bad = [{ ...goodStrips[0], angle: 30.5 }, goodStrips[1], goodStrips[2]];
     const r = certify({ workarea: square(), strips: bad });
