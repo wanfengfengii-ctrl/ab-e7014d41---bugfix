@@ -84,6 +84,40 @@ describe('输入校验', () => {
     assert.equal(r.ok, false);
     assert.ok(r.errors.some((e) => e.includes('凸')));
   });
+  test('拒绝自交多边形：各局部转向均为逆时针的星形轮廓', () => {
+    // 自交 8 顶点轮廓：每个局部转向都是 CCW，但非相邻边在多处相交，
+    // 鞋带面积（367）没有有效业务几何含义，必须按输入错误拒绝。
+    const r = certify({
+      workarea: [[10, 0], [0, 10], [-10, 0], [0, -10], [7, 7], [-7, 7], [-7, -7], [7, -7]],
+      strips: [
+        { cx: 0, cy: 0, w: 40, h: 40, angle: 0 },
+        { cx: 100, cy: 100, w: 2, h: 2, angle: 0 },
+        { cx: -100, cy: -100, w: 2, h: 2, angle: 0 },
+      ],
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => e.includes('自交')), JSON.stringify(r.errors));
+    // 被拒绝后不得给出覆盖认证结论或面积统计
+    assert.equal(r.stats, undefined);
+    assert.equal(r.firstRisk, undefined);
+    assert.equal(r.risks, undefined);
+  });
+  test('拒绝顶点落在非相邻边上的自接触多边形', () => {
+    // 顶点 (2,0) 落在非相邻边 (0,0)→(4,0) 上（非 proper 相交，端点接触）
+    const r = certify({
+      workarea: [[0, 0], [4, 0], [4, 4], [2, 0], [0, 4]],
+      strips: goodStrips,
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => e.includes('自交')), JSON.stringify(r.errors));
+  });
+  test('接受简单严格凸的非矩形多边形', () => {
+    const r = certify({
+      workarea: [[0, 0], [10, 0], [12, 6], [4, 10], [-2, 4]],
+      strips: goodStrips,
+    });
+    assert.equal(r.errors.length, 0, JSON.stringify(r.errors));
+  });
   test('拒绝非整数矩形参数', () => {
     const bad = [{ ...goodStrips[0], angle: 30.5 }, goodStrips[1], goodStrips[2]];
     const r = certify({ workarea: square(), strips: bad });

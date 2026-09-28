@@ -54,8 +54,42 @@ export function validateInput(input) {
         if (cross <= tol) allLeft = false;
         if (cross >= -tol) allRight = false;
       }
+      // 简单性检查：局部转向全为逆时针并不能排除自交（如星形轮廓），
+      // 任意一对非相邻边相交（含端点落在另一边上）都不是简单多边形，
+      // 其鞋带面积/半平面剖分结果没有有效的业务几何含义。
+      const linTol = 1e-9 * scale;
+      const cross3 = (o, u, v) =>
+        (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0]);
+      const onSegment = (p, q, a) =>
+        Math.abs(cross3(p, q, a)) <= tol &&
+        a[0] >= Math.min(p[0], q[0]) - linTol && a[0] <= Math.max(p[0], q[0]) + linTol &&
+        a[1] >= Math.min(p[1], q[1]) - linTol && a[1] <= Math.max(p[1], q[1]) + linTol;
+      let simple = true;
+      for (let i = 0; i < n && simple; i++) {
+        const p = wa[i];
+        const q = wa[(i + 1) % n];
+        for (let j = i + 1; j < n; j++) {
+          if (j === i + 1 || (i === 0 && j === n - 1)) continue; // 相邻边共享端点，跳过
+          const a = wa[j];
+          const b = wa[(j + 1) % n];
+          const c1 = cross3(p, q, a);
+          const c2 = cross3(p, q, b);
+          const c3 = cross3(a, b, p);
+          const c4 = cross3(a, b, q);
+          const proper =
+            ((c1 > tol && c2 < -tol) || (c1 < -tol && c2 > tol)) &&
+            ((c3 > tol && c4 < -tol) || (c3 < -tol && c4 > tol));
+          if (proper || onSegment(p, q, a) || onSegment(p, q, b) ||
+              onSegment(a, b, p) || onSegment(a, b, q)) {
+            simple = false;
+            break;
+          }
+        }
+      }
       if (area2 <= tol && area2 >= -tol) {
         errors.push('工作区面积过小或顶点共线');
+      } else if (!simple) {
+        errors.push('工作区必须是不自交的简单多边形（任意两条非相邻边不能相交）');
       } else if (area2 < 0 && allRight) {
         errors.push('工作区顶点必须按逆时针（CCW）顺序给出');
       } else if (area2 > 0 && !allLeft) {
